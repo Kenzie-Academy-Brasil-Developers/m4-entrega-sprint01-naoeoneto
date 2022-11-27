@@ -6,12 +6,22 @@ const app = express()
 app.use(express.json())
 const port = 3000
 
-const createUserService = ({ name, email }) => {
-    const findUser = users.find(user => user.email === email)
-
+const checkUserExists = (request, response, next) => {
+    const findUser = users.find(user => user.email === request.body.email)
+    console.log(findUser)
+    
     if(findUser){
-        return [401, { error: "User already exists" }]
+        return response.status(404).json({ error: "User already exists" })
     }
+
+    // request.user = {
+    //     userIndex: findUserIndex
+    // }
+
+    return next()
+}
+
+const createUserService = ({ name, email }) => {
 
     const newUser = {
         name,
@@ -24,13 +34,23 @@ const createUserService = ({ name, email }) => {
     return [201, newUser]
 }
 
+const listUsersService = () => {
+    return users
+}
+
 const createUserController = (request, response) => {
     const [status, data] = createUserService(request.body)
 
     return response.status(status).json(data)
 }
 
-app.post('/register', createUserController)
+const listUsersController = (request, response) => {
+    const list = listUsersService()
+    return response.json(list)
+}
+
+app.post('/register', checkUserExists, createUserController)
+app.get('/users', listUsersController)
 
 app.get('/', (req, res) => {
     return res.send('Alô, alô, testando!')
