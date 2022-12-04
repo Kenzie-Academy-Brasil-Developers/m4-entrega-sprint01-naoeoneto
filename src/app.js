@@ -10,7 +10,7 @@ const port = 3000
 
 // MIDDLEWARES
 const checkEmailExists = (request, response, next) => {
-    const findUser = users.find(user => user.email === request.body.email)
+    const findUser = users.find(elem => elem.email === request.body.email)
     
     if(findUser){
         return response.status(409).json({ message: "E-mail already registered" })
@@ -34,17 +34,18 @@ const checkAuthExists = (request, response, next) => {
         }
 
         request.user = {
-            id: decoded.sub
+            id: decoded.sub,
+            adm: decoded.isAdm
         }
-
+        
         return next()
     })
 }
 
 const checkUserIsAdm = (request, response, next) => {
-    const user = users.find(elem => elem.uuid === request.user.id)
+    const checkUser = users.find(elem => elem.uuid === request.user.id)
     
-    if(!user.isAdm){
+    if(!checkUser.isAdm){
         return response.status(403).json({ message: "Missing Admin Permissions" })
     }
 
@@ -52,13 +53,11 @@ const checkUserIsAdm = (request, response, next) => {
 }
 
 const checkNotAdminButHaveId = (request, response, next) => {
-    const user = users.find(elem => elem.uuid === request.user.id)
-    console.log(user)
+    const { user, params } = request
     
-    if(!user.isAdm && user.uuid !== request.user.id){
+    if(!user.adm && user.id !== params.uuid){
         return response.status(403).json({ message: "Missing Admin Permissions" })
     }
-
     return next()
 }
 
@@ -89,7 +88,7 @@ const createUserService = async ({ name, email, password, isAdm }) => {
 }
 
 const userLoginService = async ({ email, password }) => {
-    const loggedUser = users.find(user => user.email === email)
+    const loggedUser = users.find(elem => elem.email === email)
     
     if(!loggedUser){
         return [401, {message: "Wrong email/password"}]
@@ -102,7 +101,7 @@ const userLoginService = async ({ email, password }) => {
     }
 
     const token = jwt.sign(
-        { email },
+        { isAdm: loggedUser.isAdm },
         "SECRET_KEY",
         { expiresIn: '24h', subject: loggedUser.uuid }
     )
@@ -125,10 +124,19 @@ const userInfoService = (id) => {
     return [200, user]
 }
 
-const editInfoService = () => {
-    const { id } = request.params
-    const user = users.find(elem => elem.uuid === id)
-    console.log(user)
+const editInfoService = (payload, id) => {
+    const userIndex = users.findIndex(elem => elem.uuid === id)
+    
+    users[userIndex] = {
+        ...users[userIndex],
+        ...payload,
+        updatedOn: new Date()
+    }
+
+    let updatedUser = users[userIndex]
+    delete updatedUser.password
+
+    return [200, updatedUser]
 }
 
 const deleteUserService = (id) => {
@@ -167,12 +175,12 @@ const userInfoController = (request, response) => {
 }
 
 const editInfoController = (request, response) => {
-    const [status, data] = editInfoService(request.user.id)
+    const [status, data] = editInfoService(request.body, request.params.uuid)
     return response.status(status).json(data)
 }
 
 const deleteUserController = (request, response) => {
-    const [status, data] = deleteUserService(request.user.id)
+    const [status, data] = deleteUserService(request.params.uuid)
     return response.status(status).json(data)
 }
 
@@ -181,12 +189,8 @@ app.post('/users', checkEmailExists, createUserController)
 app.post('/login', userLoginController)
 app.get('/users', checkAuthExists, checkUserIsAdm, listUsersController)
 app.get('/users/profile', checkAuthExists, userInfoController)
-app.patch('/users/:uuid', checkAuthExists, checkNotAdminButHaveId, editInfoController) 
+app.patch('/users/:uuid', checkAuthExists, checkNotAdminButHaveId, editInfoController)
 app.delete('/users/:uuid', checkAuthExists, checkNotAdminButHaveId, deleteUserController)
-
-app.get('/', (req, res) => {
-    return res.send('Alô, alô, testando!')
-})
 
 app.listen(port, () => {
     return console.log(`Rodando em http://localhost:${port}`)
